@@ -9,12 +9,14 @@ import { toast } from "sonner";
 import { Hexagon, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTonConnect } from "@/hooks/useTonConnect";
+import { useTonBalance } from "@/hooks/useTonBalance";
 
 const Index = () => {
-  const { connected, sendTransaction } = useTonConnect();
+  const { connected, sendTransaction, friendlyAddress } = useTonConnect();
+  const { refetch: refetchBalance } = useTonBalance(friendlyAddress);
 
-  // Simulated wallet state (would come from contract in production)
-  const [balance, setBalance] = useState(12.5);
+  // Demo state (for offline mode)
+  const [demoBalance, setDemoBalance] = useState(12.5);
   const [cashbackBalance, setCashbackBalance] = useState(0.25);
   const [totalDeposits, setTotalDeposits] = useState(50.0);
   const [totalWithdrawals, setTotalWithdrawals] = useState(37.5);
@@ -31,7 +33,7 @@ const Index = () => {
     if (!connected) {
       // Demo mode
       const cashback = (amount * cashbackRate) / 10000;
-      setBalance((prev) => prev + amount);
+      setDemoBalance((prev) => prev + amount);
       setTotalDeposits((prev) => prev + amount);
       setCashbackBalance((prev) => prev + cashback);
       setLastTxTimestamp(Math.floor(Date.now() / 1000));
@@ -50,18 +52,20 @@ const Index = () => {
       
       await sendTransaction(contractAddress, amountNano);
       
+      // Refresh balance after transaction
+      setTimeout(() => refetchBalance(), 3000);
+      
       const cashback = (amount * cashbackRate) / 10000;
-      setBalance((prev) => prev + amount);
       setTotalDeposits((prev) => prev + amount);
       setCashbackBalance((prev) => prev + cashback);
       setLastTxTimestamp(Math.floor(Date.now() / 1000));
       
-      toast.success(`Deposited ${amount} TON`, {
-        description: `Transaction sent to wallet for confirmation`,
+      toast.success(`Deposit initiated`, {
+        description: `Transaction sent. Balance will update shortly.`,
       });
     } catch (error) {
       toast.error("Transaction failed", {
-        description: error instanceof Error ? error.message : "Unknown error",
+        description: error instanceof Error ? error.message : "User rejected or error occurred",
       });
     } finally {
       setIsLoading(false);
@@ -69,14 +73,9 @@ const Index = () => {
   };
 
   const handleWithdraw = async (amount: number) => {
-    if (amount > balance) {
-      toast.error("Insufficient balance");
-      return;
-    }
-
     if (!connected) {
       // Demo mode
-      setBalance((prev) => prev - amount);
+      setDemoBalance((prev) => prev - amount);
       setTotalWithdrawals((prev) => prev + amount);
       setLastTxTimestamp(Math.floor(Date.now() / 1000));
       toast.success(`Withdrawn ${amount} TON (Demo)`);
@@ -86,12 +85,13 @@ const Index = () => {
     // Real transaction would trigger contract's Withdraw message
     setIsLoading(true);
     try {
-      // In production, encode and send Withdraw message to contract
       toast.success(`Withdrawal request sent`, {
         description: `Waiting for wallet confirmation`,
       });
       
-      setBalance((prev) => prev - amount);
+      // Refresh balance after transaction
+      setTimeout(() => refetchBalance(), 3000);
+      
       setTotalWithdrawals((prev) => prev + amount);
       setLastTxTimestamp(Math.floor(Date.now() / 1000));
     } catch (error) {
@@ -112,7 +112,10 @@ const Index = () => {
       return;
     }
 
-    setBalance((prev) => prev + cashbackBalance);
+    if (!connected) {
+      setDemoBalance((prev) => prev + cashbackBalance);
+    }
+    
     setCashbackBalance(0);
     setLastTxTimestamp(Math.floor(Date.now() / 1000));
     toast.success(`Claimed ${cashbackBalance.toFixed(4)} TON cashback`);
@@ -147,7 +150,7 @@ const Index = () => {
                 rel="noopener noreferrer"
               >
                 <ExternalLink className="w-4 h-4" />
-                Tact Docs
+                Docs
               </a>
             </Button>
           </div>
@@ -158,7 +161,7 @@ const Index = () => {
           {/* Left Column */}
           <div className="space-y-6">
             <WalletCard
-              balance={balance}
+              demoBalance={demoBalance}
               cashbackBalance={cashbackBalance}
               onDeposit={() => setModalType("deposit")}
               onWithdraw={() => setModalType("withdraw")}
@@ -194,7 +197,7 @@ const Index = () => {
         onClose={() => setModalType(null)}
         type={modalType || "deposit"}
         onConfirm={modalType === "deposit" ? handleDeposit : handleWithdraw}
-        maxAmount={modalType === "withdraw" ? balance : undefined}
+        maxAmount={modalType === "withdraw" ? demoBalance : undefined}
         isLoading={isLoading}
       />
     </div>
