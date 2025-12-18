@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Loader2 } from "lucide-react";
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -15,6 +15,7 @@ interface TransactionModalProps {
   type: "deposit" | "withdraw";
   onConfirm: (amount: number) => void;
   maxAmount?: number;
+  isLoading?: boolean;
 }
 
 export function TransactionModal({
@@ -23,6 +24,7 @@ export function TransactionModal({
   type,
   onConfirm,
   maxAmount,
+  isLoading,
 }: TransactionModalProps) {
   const [amount, setAmount] = useState("");
 
@@ -70,6 +72,7 @@ export function TransactionModal({
               step="0.01"
               min="0"
               max={maxAmount}
+              disabled={isLoading}
             />
             {maxAmount !== undefined && !isDeposit && (
               <p className="text-xs text-muted-foreground mt-1">
@@ -86,6 +89,7 @@ export function TransactionModal({
                 size="sm"
                 onClick={() => setAmount(preset.toString())}
                 className="flex-1"
+                disabled={isLoading}
               >
                 {preset}
               </Button>
@@ -94,16 +98,23 @@ export function TransactionModal({
         </div>
 
         <div className="flex gap-3">
-          <Button variant="ghost" onClick={onClose} className="flex-1">
+          <Button variant="ghost" onClick={onClose} className="flex-1" disabled={isLoading}>
             Cancel
           </Button>
           <Button
             variant={isDeposit ? "ton" : "default"}
             onClick={handleConfirm}
             className="flex-1"
-            disabled={!amount || parseFloat(amount) <= 0}
+            disabled={!amount || parseFloat(amount) <= 0 || isLoading}
           >
-            Confirm {isDeposit ? "Deposit" : "Withdrawal"}
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Confirming...
+              </>
+            ) : (
+              `Confirm ${isDeposit ? "Deposit" : "Withdrawal"}`
+            )}
           </Button>
         </div>
       </DialogContent>
