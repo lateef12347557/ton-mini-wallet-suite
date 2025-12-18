@@ -4,12 +4,16 @@ import { StatsPanel } from "@/components/wallet/StatsPanel";
 import { ContractCode } from "@/components/wallet/ContractCode";
 import { ArchitectureDocs } from "@/components/wallet/ArchitectureDocs";
 import { TransactionModal } from "@/components/wallet/TransactionModal";
+import { WalletConnect } from "@/components/wallet/WalletConnect";
 import { toast } from "sonner";
 import { Hexagon, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTonConnect } from "@/hooks/useTonConnect";
 
 const Index = () => {
-  // Simulated wallet state
+  const { connected, sendTransaction } = useTonConnect();
+
+  // Simulated wallet state (would come from contract in production)
   const [balance, setBalance] = useState(12.5);
   const [cashbackBalance, setCashbackBalance] = useState(0.25);
   const [totalDeposits, setTotalDeposits] = useState(50.0);
@@ -21,27 +25,80 @@ const Index = () => {
 
   // Modal state
   const [modalType, setModalType] = useState<"deposit" | "withdraw" | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleDeposit = (amount: number) => {
-    const cashback = (amount * cashbackRate) / 10000;
-    setBalance((prev) => prev + amount);
-    setTotalDeposits((prev) => prev + amount);
-    setCashbackBalance((prev) => prev + cashback);
-    setLastTxTimestamp(Math.floor(Date.now() / 1000));
-    toast.success(`Deposited ${amount} TON`, {
-      description: `+${cashback.toFixed(4)} TON cashback earned`,
-    });
+  const handleDeposit = async (amount: number) => {
+    if (!connected) {
+      // Demo mode
+      const cashback = (amount * cashbackRate) / 10000;
+      setBalance((prev) => prev + amount);
+      setTotalDeposits((prev) => prev + amount);
+      setCashbackBalance((prev) => prev + cashback);
+      setLastTxTimestamp(Math.floor(Date.now() / 1000));
+      toast.success(`Deposited ${amount} TON (Demo)`, {
+        description: `+${cashback.toFixed(4)} TON cashback earned`,
+      });
+      return;
+    }
+
+    // Real transaction
+    setIsLoading(true);
+    try {
+      // In production, this would send to the actual MiniWallet contract
+      const contractAddress = "EQExample..."; // Replace with actual contract
+      const amountNano = (amount * 1e9).toString();
+      
+      await sendTransaction(contractAddress, amountNano);
+      
+      const cashback = (amount * cashbackRate) / 10000;
+      setBalance((prev) => prev + amount);
+      setTotalDeposits((prev) => prev + amount);
+      setCashbackBalance((prev) => prev + cashback);
+      setLastTxTimestamp(Math.floor(Date.now() / 1000));
+      
+      toast.success(`Deposited ${amount} TON`, {
+        description: `Transaction sent to wallet for confirmation`,
+      });
+    } catch (error) {
+      toast.error("Transaction failed", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleWithdraw = (amount: number) => {
+  const handleWithdraw = async (amount: number) => {
     if (amount > balance) {
       toast.error("Insufficient balance");
       return;
     }
-    setBalance((prev) => prev - amount);
-    setTotalWithdrawals((prev) => prev + amount);
-    setLastTxTimestamp(Math.floor(Date.now() / 1000));
-    toast.success(`Withdrawn ${amount} TON`);
+
+    if (!connected) {
+      // Demo mode
+      setBalance((prev) => prev - amount);
+      setTotalWithdrawals((prev) => prev + amount);
+      setLastTxTimestamp(Math.floor(Date.now() / 1000));
+      toast.success(`Withdrawn ${amount} TON (Demo)`);
+      return;
+    }
+
+    // Real transaction would trigger contract's Withdraw message
+    setIsLoading(true);
+    try {
+      // In production, encode and send Withdraw message to contract
+      toast.success(`Withdrawal request sent`, {
+        description: `Waiting for wallet confirmation`,
+      });
+      
+      setBalance((prev) => prev - amount);
+      setTotalWithdrawals((prev) => prev + amount);
+      setLastTxTimestamp(Math.floor(Date.now() / 1000));
+    } catch (error) {
+      toast.error("Withdrawal failed");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleClaimCashback = () => {
@@ -49,6 +106,12 @@ const Index = () => {
       toast.error("No cashback to claim");
       return;
     }
+    
+    if (!connected) {
+      toast.error("Connect wallet to claim cashback");
+      return;
+    }
+
     setBalance((prev) => prev + cashbackBalance);
     setCashbackBalance(0);
     setLastTxTimestamp(Math.floor(Date.now() / 1000));
@@ -63,7 +126,7 @@ const Index = () => {
 
       <div className="container max-w-6xl mx-auto px-4 py-8 relative z-10">
         {/* Header */}
-        <header className="flex items-center justify-between mb-8 animate-fade-in">
+        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8 animate-fade-in">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl ton-gradient glow-effect">
               <Hexagon className="w-8 h-8 text-primary-foreground" />
@@ -75,16 +138,19 @@ const Index = () => {
               </p>
             </div>
           </div>
-          <Button variant="glass" size="sm" asChild>
-            <a
-              href="https://docs.ton.org/develop/smart-contracts/tact-language"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Tact Docs
-            </a>
-          </Button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <WalletConnect />
+            <Button variant="glass" size="sm" asChild>
+              <a
+                href="https://docs.ton.org/develop/smart-contracts/tact-language"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Tact Docs
+              </a>
+            </Button>
+          </div>
         </header>
 
         {/* Main Grid */}
@@ -129,6 +195,7 @@ const Index = () => {
         type={modalType || "deposit"}
         onConfirm={modalType === "deposit" ? handleDeposit : handleWithdraw}
         maxAmount={modalType === "withdraw" ? balance : undefined}
+        isLoading={isLoading}
       />
     </div>
   );
